@@ -3,7 +3,6 @@ name: CI on Pull Request
 on:
   pull_request:
     branches: [ main ]
-  workflow_dispatch:
 
 defaults: &backend_defaults
   run:
@@ -83,10 +82,29 @@ jobs:
     needs: [ lint, security-scan ]
 
     env:
+      DB_NAME: testdb
+      DB_USER: postgres
+      DB_PASSWORD: testpassword
+      DB_HOST: localhost
+      DB_PORT: 5432
       SECRET_KEY: "dummy_secret_for_ci"
       CELERY_BROKER_URL: "memory://"
       CELERY_RESULT_BACKEND: "cache+memory://"
 
+    services:
+      db:
+        image: timescale/timescaledb:2.13.0-pg16
+        env:
+          POSTGRES_DB: ${{ env.DB_NAME }}
+          POSTGRES_USER: ${{ env.DB_USER }}
+          POSTGRES_PASSWORD: ${{ env.DB_PASSWORD }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d testdb"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
 
     strategy:
       matrix:
@@ -121,11 +139,11 @@ jobs:
 
 
   build:
-    name: Build container
+    name: Build Django container
     runs-on: ubuntu-22.04
     needs: [ test ]
     env:
-      DOCKERFILE_PATH: ./docker/python/Dockerfile
+      DOCKERFILE_PATH: ./docker/django/Dockerfile
 
     steps:
       - name: Get code
