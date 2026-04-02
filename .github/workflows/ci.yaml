@@ -139,11 +139,11 @@ jobs:
 
 
   build:
-    name: Build Django container
+    name: Build container
     runs-on: ubuntu-22.04
     needs: [ test ]
     env:
-      DOCKERFILE_PATH: ./docker/django/Dockerfile
+      DOCKERFILE_PATH: ./docker/python/Dockerfile
 
     steps:
       - name: Get code
