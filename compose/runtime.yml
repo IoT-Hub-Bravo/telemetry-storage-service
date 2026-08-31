@@ -1,8 +1,46 @@
 name: ${COMPOSE_PROJECT_NAME:-telemetry-storage-service}
 
-services:
+x-base: &base
+  build:
+    context: ..
+    dockerfile: ./docker/Dockerfile
+  restart: unless-stopped
+  env_file:
+    - ../.env
+  networks:
+    - iot-hub-nw
 
-volumes:
+services:
+  telemetry-storage-db-init:
+    <<: *base
+    image: telemetry-storage-db-init
+    container_name: telemetry-storage-db-init
+    restart: no
+    command: [ "python", "-m", "db.init" ]
+
+  telemetry-storage-api:
+    <<: *base
+    image: telemetry-storage-api
+    container_name: telemetry-storage-api
+    ports:
+      - ${HTTP_PORT:-2100}:${HTTP_PORT:-2100}
+    command: [ "uvicorn", "api.main:app",  "--host", "0.0.0.0", "--port", "${HTTP_PORT:-8000}" ]
+    depends_on:
+      telemetry-storage-db-init:
+        condition: service_completed_successfully
+
+  telemetry-storage-kafka-telemetry-writer:
+    <<: *base
+    image: telemetry-storage-kafka-telemetry-writer
+    container_name: telemetry-storage-kafka-telemetry-writer
+    command: [ "python", "-m", "consumers.telemetry_writer" ]
+    environment:
+      KAFKA_GROUP_ID: telemetry-writer
+    depends_on:
+      telemetry-storage-db-init:
+        condition: service_completed_successfully
+
+volumes: { }
 
 networks:
   iot-hub-nw:

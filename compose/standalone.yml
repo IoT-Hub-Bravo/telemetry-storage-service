@@ -1,8 +1,71 @@
 name: ${COMPOSE_PROJECT_NAME:-telemetry-storage-service}
 
+x-base: &base
+  build:
+    context: ..
+    dockerfile: ./docker/Dockerfile
+  restart: unless-stopped
+  env_file:
+    - ../.env
+  networks:
+    - iot-hub-nw
+
 services:
+  telemetry-storage-postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: telemetry-storage-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "${DB_USER}", "-d", "${DB_NAME}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - iot-hub-nw
+
+  telemetry-storage-db-init:
+    <<: *base
+    image: telemetry-storage-db-init
+    container_name: telemetry-storage-db-init
+    restart: no
+    command: [ "python", "-m", "db.init" ]
+    depends_on:
+      telemetry-storage-postgres:
+        condition: service_healthy
+
+  telemetry-storage-api:
+    <<: *base
+    image: telemetry-storage-api
+    container_name: telemetry-storage-api
+    ports:
+      - ${HTTP_PORT:-2100}:${HTTP_PORT:-2100}
+    command: [ "uvicorn", "api.main:app",  "--host", "0.0.0.0", "--port", "${HTTP_PORT:-8000}" ]
+    depends_on:
+      telemetry-storage-db-init:
+        condition: service_completed_successfully
+
+  telemetry-storage-kafka-telemetry-writer:
+    <<: *base
+    image: telemetry-storage-kafka-telemetry-writer
+    container_name: telemetry-storage-kafka-telemetry-writer
+    command: [ "python", "-m", "consumers.telemetry_writer" ]
+    environment:
+      KAFKA_GROUP_ID: telemetry-writer
+    depends_on:
+      telemetry-storage-db-init:
+        condition: service_completed_successfully
 
 volumes:
+  db_data:
 
 networks:
   iot-hub-nw:

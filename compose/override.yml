@@ -1,0 +1,10 @@
+services:
+  telemetry-storage-api:
+    environment:
+      DEBUG: True
+    volumes:
+      - ../src:/app
+
+  telemetry-storage-kafka-telemetry-writer:
+    volumes:
+      - ../src:/app
